@@ -1,17 +1,14 @@
-
-
 ###############################################################
 # STREAMLIT APP: app.py
-# BookMatch AI — Goodreads Recommendation System
 ###############################################################
 
 import os
 import json
+import pickle
 import html
 
 import pandas as pd
 import streamlit as st
-import plotly.express as px
 
 
 ###############################################################
@@ -23,147 +20,25 @@ ARTIFACT_DIR = "artifacts"
 st.set_page_config(
     page_title="BookMatch AI",
     page_icon="📚",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
-
-
-###############################################################
-# CUSTOM CSS
-###############################################################
 
 st.markdown(
     """
     <style>
-    .stApp {
-        background:
-            radial-gradient(circle at top left, rgba(79, 70, 229, 0.18), transparent 35%),
-            radial-gradient(circle at top right, rgba(14, 165, 233, 0.16), transparent 30%),
-            linear-gradient(135deg, #020617 0%, #0F172A 45%, #111827 100%);
-        color: #F9FAFB;
-    }
-
-    .hero {
-        padding: 34px 38px;
-        border-radius: 28px;
-        background:
-            linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.92)),
-            radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.35), transparent 35%);
-        border: 1px solid rgba(148, 163, 184, 0.22);
-        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.38);
-        margin-bottom: 25px;
-    }
-
-    .hero h1 {
-        color: #F8FAFC;
-        font-size: 3.2rem;
-        margin-bottom: 0.35rem;
-        letter-spacing: -1px;
-    }
-
-    .hero p {
-        color: #CBD5E1;
-        font-size: 1.08rem;
-        max-width: 950px;
-        line-height: 1.55;
-    }
-
-    .tag {
-        display: inline-block;
-        padding: 7px 12px;
-        border-radius: 999px;
-        background: rgba(59, 130, 246, 0.18);
-        border: 1px solid rgba(96, 165, 250, 0.30);
-        color: #BFDBFE;
-        font-size: 0.82rem;
-        margin-right: 8px;
-        margin-top: 8px;
-    }
-
-    .metric-card {
-        padding: 20px 22px;
-        border-radius: 20px;
-        background: rgba(15, 23, 42, 0.78);
-        border: 1px solid rgba(148, 163, 184, 0.22);
-        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
-        min-height: 112px;
-    }
-
-    .metric-label {
-        color: #94A3B8;
-        font-size: 0.88rem;
-        margin-bottom: 8px;
-    }
-
-    .metric-value {
-        color: #F8FAFC;
-        font-size: 1.85rem;
-        font-weight: 800;
-        line-height: 1.05;
-    }
-
-    .metric-note {
-        color: #64748B;
-        font-size: 0.82rem;
-        margin-top: 8px;
-    }
-
     .book-card {
-        padding: 22px;
-        border-radius: 22px;
-        background:
-            linear-gradient(135deg, rgba(30, 41, 59, 0.94), rgba(15, 23, 42, 0.94));
-        border: 1px solid rgba(148, 163, 184, 0.22);
-        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.25);
-        margin-bottom: 16px;
+        padding: 18px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #1f2937, #111827);
+        border: 1px solid #374151;
+        margin-bottom: 15px;
     }
-
     .book-card h3 {
         color: #F9FAFB;
-        margin-bottom: 8px;
-        font-size: 1.18rem;
     }
-
     .book-card p {
-        color: #CBD5E1;
-        font-size: 0.98rem;
-        line-height: 1.42;
-        margin-bottom: 5px;
-    }
-
-    .score-pill {
-        display: inline-block;
-        padding: 5px 10px;
-        border-radius: 999px;
-        background: rgba(34, 197, 94, 0.14);
-        border: 1px solid rgba(34, 197, 94, 0.28);
-        color: #BBF7D0;
-        font-size: 0.82rem;
-        margin-top: 7px;
-    }
-
-    .ai-pill {
-        display: inline-block;
-        padding: 5px 10px;
-        border-radius: 999px;
-        background: rgba(168, 85, 247, 0.15);
-        border: 1px solid rgba(192, 132, 252, 0.30);
-        color: #E9D5FF;
-        font-size: 0.82rem;
-        margin-top: 7px;
-        margin-right: 7px;
-    }
-
-    .section-note {
-        color: #94A3B8;
-        font-size: 0.98rem;
-        line-height: 1.5;
-        margin-bottom: 1rem;
-    }
-
-    div[data-testid="stSidebar"] {
-        background: rgba(2, 6, 23, 0.94);
-        border-right: 1px solid rgba(148, 163, 184, 0.12);
+        color: #D1D5DB;
+        font-size: 16px;
     }
     </style>
     """,
@@ -172,57 +47,40 @@ st.markdown(
 
 
 ###############################################################
-# LOAD DATA
+# LOAD DATA AND MODEL ARTIFACTS
 ###############################################################
 
 @st.cache_data
 def load_data():
-    required_files = [
-        "ratings_clean.csv",
-        "book_meta.csv",
-        "user_activity.csv",
-        "model_results.csv",
-        "cf_recommendations_all_users.csv",
-        "config.json"
-    ]
-
-    missing_files = [
-        f for f in required_files
-        if not os.path.exists(os.path.join(ARTIFACT_DIR, f))
-    ]
-
-    if missing_files:
-        st.error("Missing required artifact files.")
-        st.write("The following files are missing from the artifacts folder:")
-        st.write(missing_files)
-        st.stop()
-
     ratings = pd.read_csv(os.path.join(ARTIFACT_DIR, "ratings_clean.csv"))
     book_meta = pd.read_csv(os.path.join(ARTIFACT_DIR, "book_meta.csv"))
     user_activity = pd.read_csv(os.path.join(ARTIFACT_DIR, "user_activity.csv"))
     model_results = pd.read_csv(os.path.join(ARTIFACT_DIR, "model_results.csv"))
-    cf_recommendations = pd.read_csv(
-        os.path.join(ARTIFACT_DIR, "cf_recommendations_all_users.csv")
-    )
 
     with open(os.path.join(ARTIFACT_DIR, "config.json"), "r") as f:
         config = json.load(f)
 
+    # Pull key column names from config
     book_id_col = config["book_id_col"]
     user_col = config["user_col"]
     rating_book_col = config["rating_book_col"]
 
+    # Force IDs to string so merges and Surprise predictions work correctly
     ratings[user_col] = ratings[user_col].astype(str)
     ratings[rating_book_col] = ratings[rating_book_col].astype(str)
     book_meta[book_id_col] = book_meta[book_id_col].astype(str)
 
-    cf_recommendations[user_col] = cf_recommendations[user_col].astype(str)
-    cf_recommendations[book_id_col] = cf_recommendations[book_id_col].astype(str)
-
-    return ratings, book_meta, user_activity, model_results, cf_recommendations, config
+    return ratings, book_meta, user_activity, model_results, config
 
 
-ratings, book_meta, user_activity, model_results, cf_recommendations, config = load_data()
+@st.cache_resource
+def load_model():
+    with open(os.path.join(ARTIFACT_DIR, "selected_model.pkl"), "rb") as f:
+        return pickle.load(f)
+
+
+ratings, book_meta, user_activity, model_results, config = load_data()
+model = load_model()
 
 book_id_col = config["book_id_col"]
 title_col = config["title_col"]
@@ -233,7 +91,7 @@ language_col = config.get("language_col")
 user_col = config["user_col"]
 rating_book_col = config["rating_book_col"]
 rating_col = config["rating_col"]
-selected_model_name = config.get("selected_model_name", "Selected CF model")
+selected_model_name = config["selected_model_name"]
 
 
 ###############################################################
@@ -241,12 +99,18 @@ selected_model_name = config.get("selected_model_name", "Selected CF model")
 ###############################################################
 
 def safe_text(value, default="Unknown"):
+    """
+    Safely formats text for HTML display.
+    """
     if pd.isna(value):
         return default
     return html.escape(str(value))
 
 
 def safe_float(value, decimals=3, default="Unavailable"):
+    """
+    Safely formats numeric values.
+    """
     try:
         if pd.isna(value):
             return default
@@ -255,35 +119,80 @@ def safe_float(value, decimals=3, default="Unavailable"):
         return default
 
 
-def metric_card(label, value, note=""):
-    st.markdown(
-        f"""
-        <div class="metric-card">
-            <div class="metric-label">{safe_text(label)}</div>
-            <div class="metric-value">{safe_text(value)}</div>
-            <div class="metric-note">{safe_text(note)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+def get_top_n_for_user(
+    model,
+    ratings_df,
+    book_meta_df,
+    user_id,
+    n=10,
+    candidate_pool=1000
+):
+    """
+    Generates Top-N collaborative-filtering recommendations for a selected user.
 
+    Logic:
+    - Identify books the user has already rated.
+    - Create a candidate pool of popular books the user has not rated.
+    - Use the selected Surprise model to predict the user's rating for each candidate.
+    - Return the highest-scoring recommendations with book metadata.
+    """
 
-def get_top_n_for_user(cf_recommendations_df, user_id, n=10):
     user_id = str(user_id)
 
+    rated_books = set(
+        ratings_df.loc[
+            ratings_df[user_col].astype(str) == user_id,
+            rating_book_col
+        ].astype(str)
+    )
+
+    popularity_ranked_books = (
+        ratings_df[rating_book_col]
+        .astype(str)
+        .value_counts()
+        .index
+        .tolist()
+    )
+
+    candidates = [
+        book_id
+        for book_id in popularity_ranked_books
+        if book_id not in rated_books
+    ][:candidate_pool]
+
+    if len(candidates) == 0:
+        return pd.DataFrame()
+
+    predictions = []
+
+    for book_id in candidates:
+        pred = model.predict(user_id, str(book_id))
+        predictions.append((str(book_id), pred.est))
+
     recs = (
-        cf_recommendations_df[
-            cf_recommendations_df[user_col].astype(str) == user_id
-        ]
-        .sort_values("cf_rank")
+        pd.DataFrame(predictions, columns=[book_id_col, "cf_predicted_rating"])
+        .sort_values("cf_predicted_rating", ascending=False)
         .head(n)
         .reset_index(drop=True)
     )
 
-    return recs
+    recs.insert(0, "cf_rank", range(1, len(recs) + 1))
+    recs[book_id_col] = recs[book_id_col].astype(str)
+
+    final_recs = recs.merge(
+        book_meta_df,
+        on=book_id_col,
+        how="left"
+    )
+
+    return final_recs
 
 
 def get_user_profile(user_id, ratings_df, book_meta_df, top_n=10):
+    """
+    Builds a simple reader profile for the selected user.
+    """
+
     user_id = str(user_id)
 
     user_ratings = ratings_df[
@@ -314,10 +223,17 @@ def get_user_profile(user_id, ratings_df, book_meta_df, top_n=10):
         .head(top_n)
     )
 
-    return profile, favorite_books, user_books
+    return profile, favorite_books
 
 
 def format_catalog_for_prompt(recs):
+    """
+    Converts collaborative-filtering recommendations into prompt context.
+
+    The LLM may only re-rank these candidate books.
+    It may not invent new books.
+    """
+
     lines = []
 
     for i, row in recs.reset_index(drop=True).iterrows():
@@ -325,24 +241,25 @@ def format_catalog_for_prompt(recs):
 
         author = (
             row.get(author_col, "Unknown author")
-            if author_col is not None and author_col in row.index
+            if author_col is not None
             else "Unknown author"
         )
 
         year = (
             row.get(year_col, "")
-            if year_col is not None and year_col in row.index
+            if year_col is not None
             else ""
         )
 
         avg_rating = (
             row.get(avg_col, "")
-            if avg_col is not None and avg_col in row.index
+            if avg_col is not None
             else ""
         )
 
         cf_score = row.get("cf_predicted_rating", "")
         cf_score_text = safe_float(cf_score, decimals=3)
+
         cf_rank = row.get("cf_rank", i + 1)
 
         lines.append(
@@ -360,6 +277,10 @@ def format_catalog_for_prompt(recs):
 
 
 def build_rerank_prompt(recs, reader_preference):
+    """
+    Builds a strict prompt that forces the LLM to re-rank only the CF candidates.
+    """
+
     catalog = format_catalog_for_prompt(recs)
 
     prompt = f"""
@@ -401,6 +322,10 @@ Return JSON only in this exact format:
 
 
 def get_gemini_api_key():
+    """
+    Reads Gemini API key from local environment variable or Streamlit Cloud secrets.
+    """
+
     api_key = os.getenv("GEMINI_API_KEY")
 
     if api_key:
@@ -413,22 +338,31 @@ def get_gemini_api_key():
 
 
 def rerank_with_gemini(recs, reader_preference, model_name="gemini-2.5-flash-lite"):
+    """
+    Uses Gemini to re-rank collaborative-filtering recommendations.
+
+    The API key should be stored as:
+    - Local environment variable: GEMINI_API_KEY
+    - Or Streamlit Cloud secret: GEMINI_API_KEY
+    """
+
     try:
         from google import genai
     except ImportError:
-        st.error("Missing package: google-genai. Add google-genai to requirements.txt.")
+        st.error("Missing package: install with `pip install google-genai`.")
         st.stop()
 
     api_key = get_gemini_api_key()
 
     if not api_key:
         st.error(
-            "Missing GEMINI_API_KEY. Add it in Streamlit Cloud under "
-            "Manage app > Settings > Secrets."
+            "Missing GEMINI_API_KEY. Add it as an environment variable locally "
+            "or in Streamlit Cloud under Manage app > Settings > Secrets."
         )
         st.stop()
 
     client = genai.Client(api_key=api_key)
+
     prompt = build_rerank_prompt(recs, reader_preference)
 
     response = client.models.generate_content(
@@ -469,264 +403,23 @@ def rerank_with_gemini(recs, reader_preference, model_name="gemini-2.5-flash-lit
 
 
 ###############################################################
-# CHART FUNCTIONS
+# STREAMLIT USER INTERFACE
 ###############################################################
 
-def plot_model_results(model_results_df):
-    df = model_results_df.copy()
+st.title("📚 BookMatch AI")
+st.caption("Collaborative filtering meets mood-aware AI personalization.")
 
-    for col in ["RMSE", "Precision@10", "Recall@10"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+st.sidebar.header("Recommendation Controls")
 
-    metric = st.radio(
-        "Choose model metric",
-        ["RMSE", "Precision@10", "Recall@10"],
-        horizontal=True
-    )
-
-    if metric not in df.columns:
-        st.info(f"{metric} is not available.")
-        return
-
-    plot_df = df.dropna(subset=[metric]).copy()
-
-    if plot_df.empty:
-        st.info(f"No valid values available for {metric}.")
-        return
-
-    ascending = True if metric == "RMSE" else False
-    plot_df = plot_df.sort_values(metric, ascending=ascending)
-
-    fig = px.bar(
-        plot_df,
-        x=metric,
-        y="Model",
-        orientation="h",
-        title=f"Model comparison by {metric}",
-        text=metric,
-        template="plotly_dark",
-        color=metric,
-        color_continuous_scale="Blues"
-    )
-
-    fig.update_traces(texttemplate="%{text:.4f}", textposition="outside")
-    fig.update_layout(
-        height=430,
-        margin=dict(l=20, r=40, t=60, b=20),
-        yaxis_title="",
-        xaxis_title=metric,
-        coloraxis_showscale=False
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def plot_rating_distribution():
-    dist = (
-        ratings[rating_col]
-        .value_counts()
-        .sort_index()
-        .reset_index()
-    )
-
-    dist.columns = ["Rating", "Count"]
-
-    fig = px.bar(
-        dist,
-        x="Rating",
-        y="Count",
-        title="Overall rating distribution",
-        text="Count",
-        template="plotly_dark",
-        color="Count",
-        color_continuous_scale="Purples"
-    )
-
-    fig.update_layout(
-        height=390,
-        margin=dict(l=20, r=20, t=60, b=20),
-        coloraxis_showscale=False
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def plot_user_rating_distribution(user_books):
-    user_dist = (
-        user_books[rating_col]
-        .value_counts()
-        .sort_index()
-        .reset_index()
-    )
-
-    user_dist.columns = ["Rating", "Count"]
-
-    fig = px.bar(
-        user_dist,
-        x="Rating",
-        y="Count",
-        title="Selected user's rating distribution",
-        text="Count",
-        template="plotly_dark",
-        color="Count",
-        color_continuous_scale="Teal"
-    )
-
-    fig.update_layout(
-        height=360,
-        margin=dict(l=20, r=20, t=60, b=20),
-        coloraxis_showscale=False
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def plot_top_recs_bar(cf_recs):
-    plot_df = cf_recs.copy()
-
-    if plot_df.empty:
-        return
-
-    plot_df["label"] = plot_df[title_col].astype(str).str.slice(0, 42)
-    plot_df["cf_predicted_rating"] = pd.to_numeric(
-        plot_df["cf_predicted_rating"],
-        errors="coerce"
-    )
-
-    plot_df = plot_df.sort_values("cf_predicted_rating", ascending=True)
-
-    fig = px.bar(
-        plot_df,
-        x="cf_predicted_rating",
-        y="label",
-        orientation="h",
-        title="Top recommendations by collaborative-filtering score",
-        text="cf_predicted_rating",
-        template="plotly_dark",
-        color="cf_predicted_rating",
-        color_continuous_scale="Blues"
-    )
-
-    fig.update_traces(texttemplate="%{text:.3f}", textposition="outside")
-    fig.update_layout(
-        height=max(400, 42 * len(plot_df)),
-        margin=dict(l=20, r=40, t=60, b=20),
-        yaxis_title="",
-        xaxis_title="Predicted rating",
-        coloraxis_showscale=False
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def plot_recommendation_scatter(cf_recs):
-    plot_df = cf_recs.copy()
-
-    if plot_df.empty:
-        return
-
-    plot_df["cf_predicted_rating"] = pd.to_numeric(
-        plot_df["cf_predicted_rating"],
-        errors="coerce"
-    )
-
-    y_col = None
-
-    if avg_col is not None and avg_col in plot_df.columns:
-        plot_df[avg_col] = pd.to_numeric(plot_df[avg_col], errors="coerce")
-        if not plot_df[avg_col].isna().all():
-            y_col = avg_col
-
-    if y_col is None:
-        plot_df["display_rank"] = pd.to_numeric(plot_df["cf_rank"], errors="coerce")
-        y_col = "display_rank"
-
-    hover_cols = [title_col]
-
-    if author_col is not None and author_col in plot_df.columns:
-        hover_cols.append(author_col)
-
-    if year_col is not None and year_col in plot_df.columns:
-        hover_cols.append(year_col)
-
-    fig = px.scatter(
-        plot_df,
-        x="cf_predicted_rating",
-        y=y_col,
-        size="cf_predicted_rating",
-        color="cf_rank",
-        hover_data=hover_cols,
-        title="Recommendation map",
-        template="plotly_dark",
-        color_continuous_scale="Viridis"
-    )
-
-    fig.update_layout(
-        height=430,
-        margin=dict(l=20, r=20, t=60, b=20),
-        xaxis_title="CF predicted rating",
-        yaxis_title="Catalog average rating" if y_col == avg_col else "Recommendation rank"
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def plot_ai_match_scores(ai_recs):
-    plot_df = ai_recs.copy()
-
-    if plot_df.empty:
-        return
-
-    plot_df["match_score"] = pd.to_numeric(plot_df["match_score"], errors="coerce")
-
-    title_source = "title_llm" if "title_llm" in plot_df.columns else "title"
-
-    if title_source not in plot_df.columns:
-        title_source = title_col
-
-    plot_df["label"] = plot_df[title_source].astype(str).str.slice(0, 42)
-    plot_df = plot_df.sort_values("match_score", ascending=True)
-
-    fig = px.bar(
-        plot_df,
-        x="match_score",
-        y="label",
-        orientation="h",
-        title="AI personalized match scores",
-        text="match_score",
-        template="plotly_dark",
-        color="match_score",
-        color_continuous_scale="Plasma"
-    )
-
-    fig.update_traces(texttemplate="%{text:.0f}", textposition="outside")
-    fig.update_layout(
-        height=max(400, 42 * len(plot_df)),
-        margin=dict(l=20, r=40, t=60, b=20),
-        yaxis_title="",
-        xaxis_title="AI match score",
-        coloraxis_showscale=False
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-
-###############################################################
-# SIDEBAR
-###############################################################
-
-st.sidebar.markdown("## ⚙️ Recommendation Controls")
-
-user_options = sorted(cf_recommendations[user_col].astype(str).unique())
+user_options = sorted(ratings[user_col].astype(str).unique())
 
 selected_user = st.sidebar.selectbox(
-    "Select Goodreads user",
+    "Select Goodreads User",
     user_options
 )
 
 top_n = st.sidebar.slider(
-    "Number of recommendations",
+    "Number of Recommendations",
     min_value=5,
     max_value=20,
     value=10
@@ -734,340 +427,173 @@ top_n = st.sidebar.slider(
 
 reader_preference = st.sidebar.text_area(
     "What are you in the mood for?",
-    value="I want something emotionally engaging, thoughtful, and not too dark.",
-    height=120
-)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown(
-    """
-    **How it works**
-
-    1. Select a Goodreads user  
-    2. Load precomputed CF recommendations  
-    3. Re-rank with Gemini  
-    4. Compare model scores and AI explanations  
-    """
+    value="I want something emotionally engaging, thoughtful, and not too dark."
 )
 
 
 ###############################################################
-# HERO
+# MODEL SUMMARY SECTION
 ###############################################################
 
-st.markdown(
-    """
-    <div class="hero">
-        <h1>📚 BookMatch AI</h1>
-        <p>
-            A hybrid Goodreads recommendation system that combines collaborative filtering,
-            model evaluation, interactive analytics, and Gemini-powered personalization.
-            The notebook trains and evaluates the recommender; this deployed app loads
-            precomputed Top-N candidates from the selected collaborative-filtering model.
-        </p>
-        <span class="tag">Collaborative Filtering</span>
-        <span class="tag">Precomputed Top-N</span>
-        <span class="tag">Gemini Re-Ranking</span>
-        <span class="tag">Interactive Analytics</span>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+st.subheader("Model Summary")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric("Selected Model", selected_model_name)
+
+with col2:
+    st.metric("Total Users", f"{ratings[user_col].nunique():,}")
+
+with col3:
+    st.metric("Total Ratings", f"{len(ratings):,}")
+
+with st.expander("Model Evaluation Results"):
+    st.dataframe(model_results, width="stretch")
 
 
 ###############################################################
-# USER PROFILE
+# USER PROFILE SECTION
 ###############################################################
 
-profile, favorite_books, user_books = get_user_profile(
+st.subheader("Reader DNA")
+
+profile, favorite_books = get_user_profile(
     user_id=selected_user,
     ratings_df=ratings,
     book_meta_df=book_meta,
     top_n=10
 )
 
+c1, c2, c3 = st.columns(3)
 
-###############################################################
-# TOP METRICS
-###############################################################
+with c1:
+    st.metric("Ratings Given", f"{profile['ratings_given']:,}")
 
-m1, m2, m3, m4 = st.columns(4)
+with c2:
+    st.metric("Average Rating", safe_float(profile["average_rating"], decimals=2))
 
-with m1:
-    metric_card(
-        "Selected model",
-        selected_model_name,
-        "Model trained and selected in notebook"
-    )
+with c3:
+    st.metric("Rating Std Dev", safe_float(profile["rating_std"], decimals=2))
 
-with m2:
-    metric_card(
-        "Users",
-        f"{ratings[user_col].nunique():,}",
-        "Unique Goodreads users"
-    )
+with st.expander("User's Highest-Rated Books"):
+    favorite_display_cols = [book_id_col, title_col]
 
-with m3:
-    metric_card(
-        "Ratings",
-        f"{len(ratings):,}",
-        "Cleaned rating records"
-    )
+    if author_col is not None:
+        favorite_display_cols.append(author_col)
 
-with m4:
-    metric_card(
-        "Selected user avg",
-        safe_float(profile["average_rating"], decimals=2),
-        f"{profile['ratings_given']:,} ratings given"
+    if year_col is not None:
+        favorite_display_cols.append(year_col)
+
+    favorite_display_cols.append(rating_col)
+
+    st.dataframe(
+        favorite_books[favorite_display_cols],
+        width="stretch"
     )
 
 
 ###############################################################
-# TABS
+# COLLABORATIVE FILTERING RECOMMENDATIONS
 ###############################################################
 
-tab_overview, tab_reader, tab_recs, tab_ai = st.tabs(
-    [
-        "📊 Overview",
-        "🧬 Reader Profile",
-        "🎯 CF Recommendations",
-        "✨ AI Re-Ranking"
-    ]
-)
-
-
-###############################################################
-# OVERVIEW TAB
-###############################################################
-
-with tab_overview:
-    st.markdown("### System overview")
-    st.markdown(
-        """
-        <div class="section-note">
-        RMSE evaluates rating-prediction accuracy. Precision@10 and Recall@10 evaluate
-        Top-N recommendation usefulness. The deployed app avoids live Surprise dependency
-        issues by loading precomputed recommendations from the selected model.
-        </div>
-        """,
-        unsafe_allow_html=True
+if st.button("Generate Collaborative Filtering Recommendations"):
+    cf_recs = get_top_n_for_user(
+        model=model,
+        ratings_df=ratings,
+        book_meta_df=book_meta,
+        user_id=selected_user,
+        n=top_n
     )
 
-    left, right = st.columns([1.1, 0.9])
-
-    with left:
-        plot_model_results(model_results)
-
-    with right:
-        plot_rating_distribution()
-
-    with st.expander("Raw model evaluation results"):
-        st.dataframe(model_results, use_container_width=True)
-
-
-###############################################################
-# READER PROFILE TAB
-###############################################################
-
-with tab_reader:
-    st.markdown("### Reader DNA")
-    st.markdown(
-        """
-        <div class="section-note">
-        This section summarizes the selected user's historical rating behavior.
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    r1, r2, r3 = st.columns(3)
-
-    with r1:
-        st.metric("Ratings given", f"{profile['ratings_given']:,}")
-
-    with r2:
-        st.metric("Average rating", safe_float(profile["average_rating"], decimals=2))
-
-    with r3:
-        st.metric("Rating std dev", safe_float(profile["rating_std"], decimals=2))
-
-    left, right = st.columns([0.9, 1.1])
-
-    with left:
-        plot_user_rating_distribution(user_books)
-
-    with right:
-        st.markdown("#### Highest-rated books")
-
-        favorite_display_cols = [book_id_col, title_col]
-
-        if author_col is not None and author_col in favorite_books.columns:
-            favorite_display_cols.append(author_col)
-
-        if year_col is not None and year_col in favorite_books.columns:
-            favorite_display_cols.append(year_col)
-
-        favorite_display_cols.append(rating_col)
-
-        st.dataframe(
-            favorite_books[favorite_display_cols],
-            use_container_width=True,
-            height=360
-        )
-
-
-###############################################################
-# CF RECOMMENDATIONS TAB
-###############################################################
-
-with tab_recs:
-    st.markdown("### Collaborative-filtering Top-N recommendations")
-    st.markdown(
-        """
-        <div class="section-note">
-        These recommendations were generated by the selected collaborative-filtering model
-        in the notebook and saved for stable cloud deployment.
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    if st.button("🚀 Load collaborative-filtering recommendations", type="primary"):
-        cf_recs = get_top_n_for_user(
-            cf_recommendations_df=cf_recommendations,
-            user_id=selected_user,
-            n=top_n
-        )
-
-        if cf_recs.empty:
-            st.warning("No recommendations could be found for this user.")
-        else:
-            st.session_state["cf_recs"] = cf_recs
-
-            if "ai_recs" in st.session_state:
-                del st.session_state["ai_recs"]
-
-    if "cf_recs" not in st.session_state:
-        st.info("Click the button above to load collaborative-filtering recommendations.")
+    if cf_recs.empty:
+        st.warning("No recommendations could be generated for this user.")
     else:
-        cf_recs = st.session_state["cf_recs"]
+        st.session_state["cf_recs"] = cf_recs
 
-        c_left, c_right = st.columns([1.05, 0.95])
-
-        with c_left:
-            plot_top_recs_bar(cf_recs)
-
-        with c_right:
-            plot_recommendation_scatter(cf_recs)
-
-        st.markdown("#### Recommendation cards")
-
-        for idx, row in cf_recs.reset_index(drop=True).iterrows():
-            title = safe_text(row.get(title_col, "Unknown Title"), "Unknown Title")
-
-            author = (
-                safe_text(row.get(author_col, "Unknown Author"), "Unknown Author")
-                if author_col is not None and author_col in row.index
-                else "Unknown Author"
-            )
-
-            year = (
-                safe_text(row.get(year_col, ""), "")
-                if year_col is not None and year_col in row.index
-                else ""
-            )
-
-            score = safe_float(row.get("cf_predicted_rating", ""), decimals=3)
-
-            avg_rating = (
-                safe_float(row.get(avg_col, ""), decimals=2)
-                if avg_col is not None and avg_col in row.index
-                else "Unavailable"
-            )
-
-            year_line = f"<p><b>Year:</b> {year}</p>" if year else ""
-
-            st.markdown(
-                f"""
-                <div class="book-card">
-                    <h3>#{idx + 1} — {title}</h3>
-                    <p><b>Author:</b> {author}</p>
-                    {year_line}
-                    <p><b>Catalog average rating:</b> {avg_rating}</p>
-                    <span class="score-pill">CF predicted rating: {score}</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-
-###############################################################
-# AI RE-RANKING TAB
-###############################################################
-
-with tab_ai:
-    st.markdown("### Gemini AI re-ranking")
-    st.markdown(
-        """
-        <div class="section-note">
-        The AI layer does not invent new books. Gemini receives the collaborative-filtering
-        candidate list and re-ranks only those books based on the reader's stated preference.
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    if "cf_recs" not in st.session_state:
-        st.info("Load collaborative-filtering recommendations first, then return to this tab.")
-    else:
-        cf_recs = st.session_state["cf_recs"]
-
-        st.markdown("#### Current personalization request")
-        st.info(reader_preference)
-
-        if st.button("✨ AI re-rank with Gemini", type="primary"):
-            with st.spinner("Gemini is re-ranking the collaborative-filtering candidates..."):
-                ai_recs = rerank_with_gemini(
-                    recs=cf_recs,
-                    reader_preference=reader_preference
-                )
-
-            st.session_state["ai_recs"] = ai_recs
-
+        # Clear prior AI results when new CF recommendations are generated
         if "ai_recs" in st.session_state:
-            ai_recs = st.session_state["ai_recs"]
+            del st.session_state["ai_recs"]
 
-            plot_ai_match_scores(ai_recs)
 
-            st.markdown("#### AI-personalized recommendation cards")
+if "cf_recs" in st.session_state:
+    st.subheader("Collaborative Filtering Top-N Recommendations")
 
-            for _, row in ai_recs.sort_values("rank").iterrows():
-                title = row.get(
-                    "title_llm",
-                    row.get(
-                        "title",
-                        row.get(title_col, "Unknown Title")
-                    )
-                )
+    cf_recs = st.session_state["cf_recs"]
 
-                title = safe_text(title, "Unknown Title")
-                reason = safe_text(row.get("reason", ""), "")
-                match_score = safe_text(row.get("match_score", ""), "")
-                cf_score = safe_float(row.get("cf_predicted_rating", ""), decimals=3)
+    for idx, row in cf_recs.reset_index(drop=True).iterrows():
+        title = safe_text(row.get(title_col, "Unknown Title"), "Unknown Title")
 
-                rank = int(row["rank"])
+        author = (
+            safe_text(row.get(author_col, "Unknown Author"), "Unknown Author")
+            if author_col is not None
+            else "Unknown Author"
+        )
 
-                st.markdown(
-                    f"""
-                    <div class="book-card">
-                        <h3>#{rank} — {title}</h3>
-                        <span class="ai-pill">AI match score: {match_score}/100</span>
-                        <span class="score-pill">CF predicted rating: {cf_score}</span>
-                        <p style="margin-top: 12px;"><b>Why this fits:</b> {reason}</p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+        year = (
+            safe_text(row.get(year_col, ""), "")
+            if year_col is not None
+            else ""
+        )
 
-        with st.expander("View LLM prompt sent to Gemini"):
-            st.code(build_rerank_prompt(cf_recs, reader_preference), language="text")
+        score = safe_float(row.get("cf_predicted_rating", ""), decimals=3)
+
+        year_line = f"<p><b>Year:</b> {year}</p>" if year else ""
+
+        st.markdown(
+            f"""
+            <div class="book-card">
+                <h3>#{idx + 1} — {title}</h3>
+                <p><b>Author:</b> {author}</p>
+                {year_line}
+                <p><b>CF Predicted Rating:</b> {score}</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    if st.button("AI Re-Rank With Gemini"):
+        ai_recs = rerank_with_gemini(
+            recs=cf_recs,
+            reader_preference=reader_preference
+        )
+
+        st.session_state["ai_recs"] = ai_recs
+
+
+###############################################################
+# AI RE-RANKED RECOMMENDATIONS
+###############################################################
+
+if "ai_recs" in st.session_state:
+    st.subheader("AI-Personalized Ranking")
+
+    ai_recs = st.session_state["ai_recs"]
+
+    for _, row in ai_recs.sort_values("rank").iterrows():
+        title = row.get(
+            "title_llm",
+            row.get(
+                "title",
+                row.get(title_col, "Unknown Title")
+            )
+        )
+
+        title = safe_text(title, "Unknown Title")
+        reason = safe_text(row.get("reason", ""), "")
+        match_score = safe_text(row.get("match_score", ""), "")
+        cf_score = safe_float(row.get("cf_predicted_rating", ""), decimals=3)
+
+        rank = int(row["rank"])
+
+        st.markdown(
+            f"""
+            <div class="book-card">
+                <h3>#{rank} — {title}</h3>
+                <p><b>AI Match Score:</b> {match_score}/100</p>
+                <p><b>CF Predicted Rating:</b> {cf_score}</p>
+                <p><b>Why this fits:</b> {reason}</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
