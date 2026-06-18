@@ -1,0 +1,12 @@
+{
+    "book_id_col": "book_id",
+    "title_col": "title",
+    "author_col": "authors",
+    "year_col": "original_publication_year",
+    "avg_col": "average_rating",
+    "language_col": "language_code",
+    "user_col": "user_id",
+    "rating_book_col": "book_id",
+    "rating_col": "rating",
+    "selected_model_name": "User-Based CF - Pearson"
+}
